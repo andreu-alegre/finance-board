@@ -115,7 +115,7 @@ export default function AddExpenseModal({
         .eq('id', editExpense.id)
 
       if (error) {
-        setError('Error al actualizar el gasto')
+        setError(error.message || 'Error al actualizar el gasto')
         setLoading(false)
         return
       }
@@ -127,7 +127,7 @@ export default function AddExpenseModal({
       })
 
       if (error) {
-        setError('Error al guardar el gasto')
+        setError(error.message || 'Error al guardar el gasto')
         setLoading(false)
         return
       }
