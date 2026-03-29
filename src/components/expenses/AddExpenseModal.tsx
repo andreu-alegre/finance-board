@@ -2,10 +2,12 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Loader2 } from 'lucide-react'
+import { X, Loader2, CreditCard, Users, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { Category } from '@/lib/database.types'
 import { useRouter } from 'next/navigation'
+
+type ExpenseType = 'shared_card' | 'shared_own' | 'personal'
 
 interface Props {
   open: boolean
@@ -19,10 +21,18 @@ interface Props {
     amount: number
     expense_date: string
     is_shared: boolean
+    paid_from_shared_card: boolean
     split_type: '50/50' | 'proportional' | 'custom'
     category_id: string | null
     notes: string | null
   }
+}
+
+function getInitialType(edit?: Props['editExpense']): ExpenseType {
+  if (!edit) return 'shared_card'
+  if (!edit.is_shared) return 'personal'
+  if (edit.paid_from_shared_card === false) return 'shared_own'
+  return 'shared_card'
 }
 
 export default function AddExpenseModal({
@@ -40,15 +50,38 @@ export default function AddExpenseModal({
   const [expenseDate, setExpenseDate] = useState(
     editExpense?.expense_date ?? new Date().toISOString().split('T')[0]
   )
-  const [isShared, setIsShared] = useState(editExpense?.is_shared ?? true)
-  const [splitType, setSplitType] = useState<'50/50' | 'proportional' | 'custom'>(
-    editExpense?.split_type ?? '50/50'
+  const [expenseType, setExpenseType] = useState<ExpenseType>(getInitialType(editExpense))
+  const [splitType, setSplitType] = useState<'50/50' | 'proportional'>(
+    editExpense?.split_type === 'proportional' ? 'proportional' : '50/50'
   )
   const [notes, setNotes] = useState(editExpense?.notes ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const isEdit = !!editExpense
+  const isShared = expenseType !== 'personal'
+  const paidFromSharedCard = expenseType === 'shared_card'
+
+  const expenseTypes: { key: ExpenseType; label: string; sub: string; icon: React.ReactNode }[] = [
+    {
+      key: 'shared_card',
+      label: 'Tarjeta común',
+      sub: 'Compartido · descuenta del saldo',
+      icon: <CreditCard className="w-3.5 h-3.5" />,
+    },
+    {
+      key: 'shared_own',
+      label: 'Propio · Compartido',
+      sub: 'Pagado por ti · se divide',
+      icon: <Users className="w-3.5 h-3.5" />,
+    },
+    {
+      key: 'personal',
+      label: 'Personal',
+      sub: 'Solo tuyo',
+      icon: <User className="w-3.5 h-3.5" />,
+    },
+  ]
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -64,18 +97,21 @@ export default function AddExpenseModal({
       return
     }
 
+    const payload = {
+      description,
+      amount: parsedAmount,
+      category_id: categoryId,
+      expense_date: expenseDate,
+      is_shared: isShared,
+      paid_from_shared_card: paidFromSharedCard,
+      split_type: isShared ? splitType : ('50/50' as const),
+      notes: notes || null,
+    }
+
     if (isEdit) {
       const { error } = await supabase
         .from('expenses')
-        .update({
-          description,
-          amount: parsedAmount,
-          category_id: categoryId,
-          expense_date: expenseDate,
-          is_shared: isShared,
-          split_type: splitType,
-          notes: notes || null,
-        })
+        .update(payload)
         .eq('id', editExpense.id)
 
       if (error) {
@@ -87,13 +123,7 @@ export default function AddExpenseModal({
       const { error } = await supabase.from('expenses').insert({
         household_id: householdId,
         user_id: userId,
-        description,
-        amount: parsedAmount,
-        category_id: categoryId,
-        expense_date: expenseDate,
-        is_shared: isShared,
-        split_type: splitType,
-        notes: notes || null,
+        ...payload,
       })
 
       if (error) {
@@ -106,13 +136,12 @@ export default function AddExpenseModal({
     router.refresh()
     onClose()
     setLoading(false)
-    // Reset
     if (!isEdit) {
       setDescription('')
       setAmount('')
       setCategoryId(null)
       setExpenseDate(new Date().toISOString().split('T')[0])
-      setIsShared(true)
+      setExpenseType('shared_card')
       setNotes('')
     }
   }
@@ -121,7 +150,6 @@ export default function AddExpenseModal({
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -130,7 +158,6 @@ export default function AddExpenseModal({
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
           />
 
-          {/* Modal */}
           <motion.div
             initial={{ opacity: 0, y: 40, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -215,45 +242,41 @@ export default function AddExpenseModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Date */}
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
-                      Fecha
-                    </label>
-                    <input
-                      type="date"
-                      value={expenseDate}
-                      onChange={(e) => setExpenseDate(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-indigo-500/60 transition-all text-sm"
-                    />
-                  </div>
+                {/* Date */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+                    Fecha
+                  </label>
+                  <input
+                    type="date"
+                    value={expenseDate}
+                    onChange={(e) => setExpenseDate(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white focus:outline-none focus:border-indigo-500/60 transition-all text-sm"
+                  />
+                </div>
 
-                  {/* Shared toggle */}
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
-                      Tipo
-                    </label>
-                    <div className="flex rounded-xl bg-white/5 border border-white/10 p-1 h-[42px]">
+                {/* Expense type — 3 options */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-2 uppercase tracking-wide">
+                    Tipo de gasto
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {expenseTypes.map(({ key, label, sub, icon }) => (
                       <button
+                        key={key}
                         type="button"
-                        onClick={() => setIsShared(true)}
-                        className={`flex-1 text-xs font-medium rounded-lg transition-all ${
-                          isShared ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-300'
+                        onClick={() => setExpenseType(key)}
+                        className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border text-center transition-all ${
+                          expenseType === key
+                            ? 'border-indigo-500/60 bg-indigo-500/10 text-white'
+                            : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/20'
                         }`}
                       >
-                        Compartido
+                        <span className={expenseType === key ? 'text-indigo-400' : ''}>{icon}</span>
+                        <span className="text-[11px] font-medium leading-tight">{label}</span>
+                        <span className="text-[9px] text-slate-500 leading-tight">{sub}</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsShared(false)}
-                        className={`flex-1 text-xs font-medium rounded-lg transition-all ${
-                          !isShared ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-300'
-                        }`}
-                      >
-                        Personal
-                      </button>
-                    </div>
+                    ))}
                   </div>
                 </div>
 
@@ -264,20 +287,24 @@ export default function AddExpenseModal({
                       División
                     </label>
                     <div className="flex rounded-xl bg-white/5 border border-white/10 p-1">
-                      {(['50/50', 'proportional'] as const).map((type) => (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setSplitType(type)}
-                          className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
-                            splitType === type
-                              ? 'bg-white/10 text-white'
-                              : 'text-slate-400 hover:text-slate-300'
-                          }`}
-                        >
-                          {type === '50/50' ? '50/50' : 'Proporcional'}
-                        </button>
-                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setSplitType('50/50')}
+                        className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+                          splitType === '50/50' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-300'
+                        }`}
+                      >
+                        50 / 50
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSplitType('proportional')}
+                        className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+                          splitType === 'proportional' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-300'
+                        }`}
+                      >
+                        Proporcional (salario)
+                      </button>
                     </div>
                   </div>
                 )}

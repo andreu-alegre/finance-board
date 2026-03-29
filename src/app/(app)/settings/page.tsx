@@ -29,7 +29,7 @@ export default async function SettingsPage() {
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase
       .from('household_members')
-      .select('user_id, role, profiles(id, full_name, avatar_url)')
+      .select('user_id, role, profiles(id, full_name, avatar_url, net_salary)')
       .eq('household_id', householdId),
     supabase
       .from('categories')

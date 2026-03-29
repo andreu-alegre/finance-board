@@ -4,7 +4,7 @@ import { containerVariants, itemVariants } from '@/lib/motion'
 
 import { motion } from 'framer-motion'
 import { User } from '@supabase/supabase-js'
-import type { Profile, Category, Budget, Goal, Settlement } from '@/lib/database.types'
+import type { Profile, Category, Budget, Goal } from '@/lib/database.types'
 import { formatCurrency, formatDateShort, getInitials, getProgressColor } from '@/lib/utils'
 import { ArrowUpRight, ArrowDownRight, Plus, TrendingUp, Users, Target, CreditCard } from 'lucide-react'
 import Link from 'next/link'
@@ -29,6 +29,14 @@ interface Member {
   profiles: { id: string; full_name: string; avatar_url: string | null } | null
 }
 
+interface Topup {
+  id: string
+  amount: number
+  note: string | null
+  created_at: string
+  user_id: string
+}
+
 interface Props {
   user: User
   profile: Profile | null
@@ -39,8 +47,8 @@ interface Props {
   lastMonthExpenses: { amount: number; is_shared: boolean }[]
   budgets: (Budget & { categories: { name: string; icon: string | null; color: string | null } | null })[]
   goals: Goal[]
-  settlements: Settlement[]
   categories: Category[]
+  topups: Topup[]
   currentMonth: { start: string; end: string }
 }
 
@@ -55,8 +63,8 @@ export default function DashboardClient({
   lastMonthExpenses,
   budgets,
   goals,
-  settlements,
   categories,
+  topups,
 }: Props) {
   const [showAddExpense, setShowAddExpense] = useState(false)
 
@@ -67,34 +75,12 @@ export default function DashboardClient({
     : 0
   const isUp = monthChange > 0
 
-  // Balance calculation
-  const memberIds = members.map((m) => m.user_id)
-  const otherMember = members.find((m) => m.user_id !== user.id)
-
-  const balanceByUser: Record<string, { paid: number; owes: number }> = {}
-  memberIds.forEach((id) => { balanceByUser[id] = { paid: 0, owes: 0 } })
-
-  currentExpenses.forEach((exp) => {
-    if (!exp.is_shared) return
-    const paidBy = exp.user_id
-    if (balanceByUser[paidBy]) {
-      balanceByUser[paidBy].paid += exp.amount
-    }
-    const share = exp.amount / memberIds.length
-    memberIds.forEach((id) => {
-      if (balanceByUser[id]) balanceByUser[id].owes += share
-    })
-  })
-
-  const totalSettled = settlements.reduce((s, st) => {
-    if (st.from_user_id === user.id) return s - st.amount
-    if (st.to_user_id === user.id) return s + st.amount
-    return s
-  }, 0)
-
-  const myBalance = balanceByUser[user.id]
-    ? (balanceByUser[user.id].paid - balanceByUser[user.id].owes) + totalSettled
-    : 0
+  // Shared card balance: total topped up minus shared-card expenses
+  const totalTopups = topups.reduce((s, t) => s + t.amount, 0)
+  const sharedCardSpent = currentExpenses
+    .filter((e) => e.is_shared && (e as any).paid_from_shared_card !== false)
+    .reduce((s, e) => s + e.amount, 0)
+  const sharedCardBalance = totalTopups - sharedCardSpent
 
   const recentExpenses = currentExpenses.slice(0, 6)
 
@@ -148,26 +134,18 @@ export default function DashboardClient({
           </p>
         </motion.div>
 
-        {/* Balance */}
+        {/* Shared card balance */}
         <motion.div variants={itemVariants} className="glass rounded-2xl p-5">
           <div className="flex items-center gap-2 text-slate-400 text-sm mb-3">
             <Users className="w-4 h-4" />
-            Balance
+            Saldo tarjeta común
           </div>
-          {otherMember ? (
-            <>
-              <p className={`text-3xl font-semibold ${myBalance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {myBalance >= 0 ? '+' : ''}{formatCurrency(myBalance)}
-              </p>
-              <p className="text-slate-500 text-xs mt-1">
-                {myBalance >= 0
-                  ? `${otherMember.profiles?.full_name?.split(' ')[0]} te debe`
-                  : `Le debes a ${otherMember.profiles?.full_name?.split(' ')[0]}`}
-              </p>
-            </>
-          ) : (
-            <p className="text-slate-500 text-sm mt-2">Invita a tu pareja para ver el balance</p>
-          )}
+          <p className={`text-3xl font-semibold ${sharedCardBalance >= 0 ? 'text-white' : 'text-red-400'}`}>
+            {formatCurrency(sharedCardBalance)}
+          </p>
+          <p className="text-slate-500 text-xs mt-1">
+            {formatCurrency(totalTopups)} ingresado · {formatCurrency(sharedCardSpent)} gastado
+          </p>
         </motion.div>
 
         {/* Goals progress */}

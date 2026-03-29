@@ -15,6 +15,7 @@ export interface Database {
           full_name: string
           avatar_url: string | null
           currency: string
+          net_salary: number | null
           created_at: string
           updated_at: string
         }
@@ -23,6 +24,7 @@ export interface Database {
           full_name: string
           avatar_url?: string | null
           currency?: string
+          net_salary?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -31,6 +33,7 @@ export interface Database {
           full_name?: string
           avatar_url?: string | null
           currency?: string
+          net_salary?: number | null
           updated_at?: string
         }
       }
@@ -111,6 +114,7 @@ export interface Database {
           amount: number
           expense_date: string
           is_shared: boolean
+          paid_from_shared_card: boolean
           split_type: '50/50' | 'proportional' | 'custom'
           notes: string | null
           receipt_url: string | null
@@ -126,6 +130,7 @@ export interface Database {
           amount: number
           expense_date?: string
           is_shared?: boolean
+          paid_from_shared_card?: boolean
           split_type?: '50/50' | 'proportional' | 'custom'
           notes?: string | null
           receipt_url?: string | null
@@ -138,10 +143,33 @@ export interface Database {
           amount?: number
           expense_date?: string
           is_shared?: boolean
+          paid_from_shared_card?: boolean
           split_type?: '50/50' | 'proportional' | 'custom'
           notes?: string | null
           receipt_url?: string | null
           updated_at?: string
+        }
+      }
+      balance_topups: {
+        Row: {
+          id: string
+          household_id: string
+          user_id: string
+          amount: number
+          note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          household_id: string
+          user_id: string
+          amount: number
+          note?: string | null
+          created_at?: string
+        }
+        Update: {
+          amount?: number
+          note?: string | null
         }
       }
       expense_splits: {
@@ -355,6 +383,7 @@ export type Budget = Database['public']['Tables']['budgets']['Row']
 export type Goal = Database['public']['Tables']['goals']['Row']
 export type GoalContribution = Database['public']['Tables']['goal_contributions']['Row']
 export type Settlement = Database['public']['Tables']['settlements']['Row']
+export type BalanceTopup = Database['public']['Tables']['balance_topups']['Row']
 
 export type BudgetVsActual = Database['public']['Views']['budget_vs_actual']['Row']
 export type MonthlyCategorySummary = Database['public']['Views']['monthly_category_summary']['Row']

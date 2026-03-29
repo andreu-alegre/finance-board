@@ -37,13 +37,13 @@ export default async function DashboardPage() {
     { data: lastExpenses },
     { data: budgets },
     { data: goals },
-    { data: settlements },
     { data: categories },
+    { data: topups },
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
     supabase
       .from('household_members')
-      .select('user_id, role, profiles(id, full_name, avatar_url)')
+      .select('user_id, role, profiles(id, full_name, avatar_url, net_salary)')
       .eq('household_id', householdId),
     supabase
       .from('expenses')
@@ -70,14 +70,15 @@ export default async function DashboardPage() {
       .eq('status', 'active')
       .order('created_at', { ascending: false }),
     supabase
-      .from('settlements')
-      .select('*')
-      .eq('household_id', householdId),
-    supabase
       .from('categories')
       .select('*')
       .eq('household_id', householdId)
       .order('sort_order'),
+    supabase
+      .from('balance_topups')
+      .select('*')
+      .eq('household_id', householdId)
+      .order('created_at', { ascending: false }),
   ])
 
   return (
@@ -91,8 +92,8 @@ export default async function DashboardPage() {
       lastMonthExpenses={lastExpenses ?? []}
       budgets={budgets ?? []}
       goals={goals ?? []}
-      settlements={settlements ?? []}
       categories={categories ?? []}
+      topups={(topups ?? []) as { id: string; amount: number; note: string | null; created_at: string; user_id: string }[]}
       currentMonth={{ start, end }}
     />
   )

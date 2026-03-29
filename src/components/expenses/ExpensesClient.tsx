@@ -15,6 +15,7 @@ interface Expense {
   amount: number
   expense_date: string
   is_shared: boolean
+  paid_from_shared_card: boolean
   split_type: '50/50' | 'proportional' | 'custom'
   user_id: string
   category_id: string | null
