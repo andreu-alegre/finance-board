@@ -165,8 +165,9 @@ export default function AddExpenseModal({
             transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
             className="fixed inset-x-4 bottom-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-md z-50"
           >
-            <div className="glass rounded-2xl p-6 shadow-card">
-              <div className="flex items-center justify-between mb-5">
+            <div className="glass rounded-2xl shadow-card flex flex-col max-h-[90dvh]">
+              {/* Header — fixed, never scrolls */}
+              <div className="flex items-center justify-between px-6 pt-5 pb-4 flex-shrink-0 border-b border-white/5">
                 <h2 className="text-lg font-semibold text-white">
                   {isEdit ? 'Editar gasto' : 'Nuevo gasto'}
                 </h2>
@@ -178,7 +179,8 @@ export default function AddExpenseModal({
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Scrollable body */}
+              <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
                 {/* Amount */}
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
@@ -280,8 +282,8 @@ export default function AddExpenseModal({
                   </div>
                 </div>
 
-                {/* Split type (only for shared) */}
-                {isShared && (
+                {/* Split type — only for "propio compartido", not shared card (no debt to settle) */}
+                {expenseType === 'shared_own' && (
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
                       División

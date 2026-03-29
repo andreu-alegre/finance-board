@@ -2,14 +2,16 @@
 
 import { containerVariants, itemVariants } from '@/lib/motion'
 
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { User } from '@supabase/supabase-js'
 import type { Profile, Category, Budget, Goal } from '@/lib/database.types'
 import { formatCurrency, formatDateShort, getInitials, getProgressColor } from '@/lib/utils'
-import { ArrowUpRight, ArrowDownRight, Plus, TrendingUp, Users, Target, CreditCard } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, Plus, TrendingUp, Users, Target, CreditCard, X, Loader2, History } from 'lucide-react'
 import Link from 'next/link'
 import AddExpenseModal from '@/components/expenses/AddExpenseModal'
 import { useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
 interface Expense {
   id: string
@@ -52,8 +54,6 @@ interface Props {
   currentMonth: { start: string; end: string }
 }
 
-
-
 export default function DashboardClient({
   user,
   profile,
@@ -66,7 +66,13 @@ export default function DashboardClient({
   categories,
   topups,
 }: Props) {
+  const router = useRouter()
   const [showAddExpense, setShowAddExpense] = useState(false)
+  const [showTopupModal, setShowTopupModal] = useState(false)
+  const [showTopupHistory, setShowTopupHistory] = useState(false)
+  const [topupAmount, setTopupAmount] = useState('')
+  const [topupNote, setTopupNote] = useState('')
+  const [savingTopup, setSavingTopup] = useState(false)
 
   const totalThisMonth = currentExpenses.reduce((s, e) => s + e.amount, 0)
   const totalLastMonth = lastMonthExpenses.reduce((s, e) => s + e.amount, 0)
@@ -75,7 +81,7 @@ export default function DashboardClient({
     : 0
   const isUp = monthChange > 0
 
-  // Shared card balance: total topped up minus shared-card expenses
+  // Shared card balance: all-time topups minus shared-card expenses (this month)
   const totalTopups = topups.reduce((s, t) => s + t.amount, 0)
   const sharedCardSpent = currentExpenses
     .filter((e) => e.is_shared && (e as any).paid_from_shared_card !== false)
@@ -83,8 +89,26 @@ export default function DashboardClient({
   const sharedCardBalance = totalTopups - sharedCardSpent
 
   const recentExpenses = currentExpenses.slice(0, 6)
-
   const now = new Date()
+
+  async function handleAddTopup(e: React.FormEvent) {
+    e.preventDefault()
+    const parsed = parseFloat(topupAmount)
+    if (isNaN(parsed) || parsed <= 0) return
+    setSavingTopup(true)
+    const supabase = createClient()
+    await supabase.from('balance_topups').insert({
+      household_id: householdId,
+      user_id: user.id,
+      amount: parsed,
+      note: topupNote.trim() || null,
+    })
+    setSavingTopup(false)
+    setTopupAmount('')
+    setTopupNote('')
+    setShowTopupModal(false)
+    router.refresh()
+  }
 
   return (
     <motion.div
@@ -136,9 +160,27 @@ export default function DashboardClient({
 
         {/* Shared card balance */}
         <motion.div variants={itemVariants} className="glass rounded-2xl p-5">
-          <div className="flex items-center gap-2 text-slate-400 text-sm mb-3">
-            <Users className="w-4 h-4" />
-            Saldo tarjeta común
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <Users className="w-4 h-4" />
+              Tarjeta común
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setShowTopupHistory(true)}
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all"
+                title="Ver historial"
+              >
+                <History className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setShowTopupModal(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-all"
+              >
+                <Plus className="w-3 h-3" />
+                Añadir
+              </button>
+            </div>
           </div>
           <p className={`text-3xl font-semibold ${sharedCardBalance >= 0 ? 'text-white' : 'text-red-400'}`}>
             {formatCurrency(sharedCardBalance)}
@@ -280,7 +322,7 @@ export default function DashboardClient({
         </motion.div>
       </div>
 
-      {/* Members */}
+      {/* Members spending */}
       {members.length > 1 && (
         <motion.div variants={itemVariants} className="glass rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -309,6 +351,7 @@ export default function DashboardClient({
         </motion.div>
       )}
 
+      {/* Add expense modal */}
       <AddExpenseModal
         open={showAddExpense}
         onClose={() => setShowAddExpense(false)}
@@ -316,6 +359,164 @@ export default function DashboardClient({
         userId={user.id}
         categories={categories}
       />
+
+      {/* Topup modal */}
+      <AnimatePresence>
+        {showTopupModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTopupModal(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 40, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 40, scale: 0.95 }}
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+              className="fixed inset-x-4 bottom-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-sm z-50"
+            >
+              <div className="glass rounded-2xl p-6 shadow-card">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Añadir saldo</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Ingreso a la tarjeta común</p>
+                  </div>
+                  <button
+                    onClick={() => setShowTopupModal(false)}
+                    className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded-lg hover:bg-white/5"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <form onSubmit={handleAddTopup} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+                      Importe
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-medium">€</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={topupAmount}
+                        onChange={(e) => setTopupAmount(e.target.value)}
+                        required
+                        placeholder="0.00"
+                        autoFocus
+                        className="w-full pl-9 pr-4 py-3.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/60 transition-all text-2xl font-semibold"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={topupNote}
+                      onChange={(e) => setTopupNote(e.target.value)}
+                      placeholder="Nota (ej: aportación enero)..."
+                      className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500/60 transition-all text-sm"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={savingTopup}
+                    className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {savingTopup ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</>
+                    ) : (
+                      'Añadir saldo'
+                    )}
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Topup history modal */}
+      <AnimatePresence>
+        {showTopupHistory && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTopupHistory(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 40, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 40, scale: 0.95 }}
+              transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+              className="fixed inset-x-4 bottom-4 md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-sm z-50"
+            >
+              <div className="glass rounded-2xl p-6 shadow-card">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Historial de ingresos</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Aportaciones a la tarjeta común</p>
+                  </div>
+                  <button
+                    onClick={() => setShowTopupHistory(false)}
+                    className="text-slate-500 hover:text-slate-300 transition-colors p-1 rounded-lg hover:bg-white/5"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {topups.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-500 text-sm">No hay ingresos registrados</p>
+                    <button
+                      onClick={() => { setShowTopupHistory(false); setShowTopupModal(true) }}
+                      className="mt-3 text-indigo-400 hover:text-indigo-300 text-sm transition-colors"
+                    >
+                      Añadir el primero
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {topups.map((topup) => {
+                      const member = members.find((m) => m.user_id === topup.user_id)
+                      const name = member?.profiles?.full_name?.split(' ')[0] ?? 'Tú'
+                      const date = new Date(topup.created_at).toLocaleDateString('es-ES', {
+                        day: 'numeric', month: 'short', year: 'numeric'
+                      })
+                      return (
+                        <div key={topup.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/5">
+                          <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                            <span className="text-green-400 text-xs font-bold">+</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white">
+                              {topup.note || `Aportación de ${name}`}
+                            </p>
+                            <p className="text-xs text-slate-500">{name} · {date}</p>
+                          </div>
+                          <p className="text-sm font-semibold text-green-400 flex-shrink-0">
+                            +{formatCurrency(topup.amount)}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Total ingresado</span>
+                  <span className="text-sm font-semibold text-white">{formatCurrency(totalTopups)}</span>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
